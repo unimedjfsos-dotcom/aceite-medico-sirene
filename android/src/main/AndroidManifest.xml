@@ -2,11 +2,17 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 
     <application>
         <meta-data
             android:name="com.onesignal.NotificationServiceExtension"
             android:value="com.aceitemedico.sirene.NotificationServiceExtension" />
+
+        <activity
+            android:name="com.acionamentosos.enfermeiro.MainActivity"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true" />
 
         <service
             android:name="com.aceitemedico.sirene.SirenService"
