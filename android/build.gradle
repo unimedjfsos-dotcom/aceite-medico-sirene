@@ -1,0 +1,41 @@
+group 'com.aceitemedico.sirene'
+version '1.0.0'
+
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.9.1'
+    }
+}
+
+rootProject.allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+apply plugin: 'com.android.library'
+
+android {
+    namespace 'com.aceitemedico.sirene'
+    compileSdkVersion 35
+
+    defaultConfig {
+        minSdkVersion 23
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    // Apenas para compilar a extensão nativa. O app Flutter já inclui OneSignal.
+    compileOnly 'com.onesignal:OneSignal:5.9.8'
+    implementation 'androidx.annotation:annotation:1.8.2'
+}
