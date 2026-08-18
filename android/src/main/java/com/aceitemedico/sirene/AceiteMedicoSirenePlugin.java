@@ -30,6 +30,12 @@ public class AceiteMedicoSirenePlugin implements FlutterPlugin, MethodChannel.Me
                 SirenService.stop(context);
                 result.success(null);
                 break;
+            case "prepareUrgentAlert":
+                result.success(SirenService.ensureFullScreenIntentAccess(context));
+                break;
+            case "canUseFullScreenIntent":
+                result.success(SirenService.canUseFullScreenIntent(context));
+                break;
             default:
                 result.notImplemented();
         }
