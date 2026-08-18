@@ -17,6 +17,10 @@ public class AceiteMedicoSirenePlugin implements FlutterPlugin, MethodChannel.Me
         context = binding.getApplicationContext();
         channel = new MethodChannel(binding.getBinaryMessenger(), "aceite_medico_sirene");
         channel.setMethodCallHandler(this);
+
+        // On Android 14+, full-screen alerts may require one explicit user grant.
+        // Open the official system page automatically only when that grant is missing.
+        SirenService.ensureFullScreenIntentAccess(context);
     }
 
     @Override
