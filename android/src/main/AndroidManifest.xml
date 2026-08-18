@@ -1,4 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
@@ -9,14 +10,16 @@
             android:name="com.onesignal.NotificationServiceExtension"
             android:value="com.aceitemedico.sirene.NotificationServiceExtension" />
 
+        <!-- Merge these flags into the host Flutter app's launcher activity. -->
         <activity
-            android:name="com.acionamentosos.enfermeiro.MainActivity"
+            android:name="${applicationId}.MainActivity"
             android:showWhenLocked="true"
             android:turnScreenOn="true" />
 
         <service
             android:name="com.aceitemedico.sirene.SirenService"
             android:exported="false"
+            android:stopWithTask="false"
             android:foregroundServiceType="mediaPlayback" />
     </application>
 </manifest>
