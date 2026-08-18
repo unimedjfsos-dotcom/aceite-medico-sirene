@@ -11,12 +11,15 @@ import android.media.AudioAttributes;
 import android.media.AudioFormat;
 import android.media.AudioManager;
 import android.media.AudioTrack;
+import android.net.Uri;
 import android.os.Build;
 import android.os.IBinder;
 import android.os.PowerManager;
+import android.provider.Settings;
 
 public class SirenService extends Service {
-    private static final String CHANNEL_ID = "aceite_medico_sirene";
+    // New channel ID so an old/silenced channel cannot keep the urgent alert suppressed.
+    private static final String CHANNEL_ID = "aceite_medico_alerta_urgente_v3";
     private static final int NOTIFICATION_ID = 8127;
     private static final int SAMPLE_RATE = 44100;
 
@@ -27,23 +30,87 @@ public class SirenService extends Service {
 
     public static void start(Context context) {
         if (context == null) return;
+
+        wakeScreen(context);
+
         Intent intent = new Intent(context, SirenService.class);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            context.startForegroundService(intent);
-        } else {
-            context.startService(intent);
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent);
+            } else {
+                context.startService(intent);
+            }
+        } catch (Exception firstError) {
+            // Best-effort fallback for OEMs with non-standard background restrictions.
+            try {
+                context.startService(intent);
+            } catch (Exception ignored) {
+            }
         }
     }
 
     public static void stop(Context context) {
         if (context == null) return;
-        context.stopService(new Intent(context, SirenService.class));
+        try {
+            context.stopService(new Intent(context, SirenService.class));
+        } catch (Exception ignored) {
+        }
+    }
+
+    public static boolean canUseFullScreenIntent(Context context) {
+        if (context == null) return false;
+        if (Build.VERSION.SDK_INT < 34) return true;
+        try {
+            NotificationManager manager =
+                    (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+            return manager != null && manager.canUseFullScreenIntent();
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    /**
+     * Returns true when no extra permission screen is needed.
+     * On Android 14+, opens the official system page if full-screen alert access is off.
+     */
+    public static boolean ensureFullScreenIntentAccess(Context context) {
+        if (context == null) return false;
+        if (Build.VERSION.SDK_INT < 34 || canUseFullScreenIntent(context)) return true;
+
+        try {
+            Intent settingsIntent = new Intent(
+                    Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,
+                    Uri.parse("package:" + context.getPackageName())
+            );
+            settingsIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            context.startActivity(settingsIntent);
+        } catch (Exception ignored) {
+        }
+        return false;
+    }
+
+    private static void wakeScreen(Context context) {
+        try {
+            PowerManager pm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
+            if (pm != null && !pm.isInteractive()) {
+                @SuppressWarnings("deprecation")
+                PowerManager.WakeLock screenLock = pm.newWakeLock(
+                        PowerManager.SCREEN_BRIGHT_WAKE_LOCK
+                                | PowerManager.ACQUIRE_CAUSES_WAKEUP
+                                | PowerManager.ON_AFTER_RELEASE,
+                        "AceiteMedico:WakeScreen"
+                );
+                screenLock.acquire(5000L);
+            }
+        } catch (Exception ignored) {
+        }
     }
 
     @Override
     public void onCreate() {
         super.onCreate();
         createNotificationChannel();
+        wakeScreen(this);
 
         Intent launchIntent = getPackageManager().getLaunchIntentForPackage(getPackageName());
         PendingIntent launchPendingIntent = null;
@@ -71,7 +138,7 @@ public class SirenService extends Service {
 
         builder
                 .setContentTitle("SOS UNIMED")
-                .setContentText("Alerta médico ativo - toque para responder")
+                .setContentText("ALERTA MÉDICO ATIVO - abra para dar ciência")
                 .setSmallIcon(android.R.drawable.ic_dialog_alert)
                 .setOngoing(true)
                 .setAutoCancel(false)
@@ -93,7 +160,8 @@ public class SirenService extends Service {
                 int max = am.getStreamMaxVolume(AudioManager.STREAM_ALARM);
                 am.setStreamVolume(AudioManager.STREAM_ALARM, max, 0);
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
 
         try {
             PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
@@ -104,7 +172,8 @@ public class SirenService extends Service {
                 );
                 wakeLock.acquire();
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
 
         startAudio();
     }
@@ -113,13 +182,16 @@ public class SirenService extends Service {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel channel = new NotificationChannel(
                     CHANNEL_ID,
-                    "Alerta médico",
+                    "Alerta médico urgente",
                     NotificationManager.IMPORTANCE_HIGH
             );
-            channel.setDescription("Mantém a sirene do alerta médico ativa e abre a tela de resposta.");
-            channel.setSound(null, null);
+            channel.setDescription("Sirene e abertura em tela cheia para alertas médicos urgentes.");
             channel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
-            channel.setBypassDnd(true);
+            channel.enableVibration(true);
+            channel.setVibrationPattern(new long[]{0, 300, 150, 300});
+            // Audio is generated by SirenService; avoid a second notification sound.
+            channel.setSound(null, null);
+
             NotificationManager manager = getSystemService(NotificationManager.class);
             if (manager != null) {
                 manager.createNotificationChannel(channel);
@@ -215,13 +287,15 @@ public class SirenService extends Service {
         if (wakeLock != null) {
             try {
                 if (wakeLock.isHeld()) wakeLock.release();
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
             wakeLock = null;
         }
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        wakeScreen(this);
         if (!running) {
             startAudio();
         }
