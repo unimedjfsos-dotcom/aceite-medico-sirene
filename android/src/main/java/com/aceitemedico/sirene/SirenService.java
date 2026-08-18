@@ -3,6 +3,7 @@ package com.aceitemedico.sirene;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
@@ -44,18 +45,46 @@ public class SirenService extends Service {
         super.onCreate();
         createNotificationChannel();
 
+        Intent launchIntent = getPackageManager().getLaunchIntentForPackage(getPackageName());
+        PendingIntent launchPendingIntent = null;
+        if (launchIntent != null) {
+            launchIntent.addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK
+                            | Intent.FLAG_ACTIVITY_CLEAR_TOP
+                            | Intent.FLAG_ACTIVITY_SINGLE_TOP
+            );
+            int pendingFlags = PendingIntent.FLAG_UPDATE_CURRENT;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                pendingFlags |= PendingIntent.FLAG_IMMUTABLE;
+            }
+            launchPendingIntent = PendingIntent.getActivity(
+                    this,
+                    8128,
+                    launchIntent,
+                    pendingFlags
+            );
+        }
+
         Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
                 ? new Notification.Builder(this, CHANNEL_ID)
                 : new Notification.Builder(this);
 
-        Notification notification = builder
+        builder
                 .setContentTitle("SOS UNIMED")
-                .setContentText("Alerta médico ativo")
+                .setContentText("Alerta médico ativo - toque para responder")
                 .setSmallIcon(android.R.drawable.ic_dialog_alert)
                 .setOngoing(true)
+                .setAutoCancel(false)
+                .setPriority(Notification.PRIORITY_MAX)
                 .setCategory(Notification.CATEGORY_ALARM)
-                .build();
+                .setVisibility(Notification.VISIBILITY_PUBLIC);
 
+        if (launchPendingIntent != null) {
+            builder.setContentIntent(launchPendingIntent);
+            builder.setFullScreenIntent(launchPendingIntent, true);
+        }
+
+        Notification notification = builder.build();
         startForeground(NOTIFICATION_ID, notification);
 
         try {
@@ -69,7 +98,10 @@ public class SirenService extends Service {
         try {
             PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
             if (pm != null) {
-                wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "AceiteMedico:SirenWakeLock");
+                wakeLock = pm.newWakeLock(
+                        PowerManager.PARTIAL_WAKE_LOCK,
+                        "AceiteMedico:SirenWakeLock"
+                );
                 wakeLock.acquire();
             }
         } catch (Exception ignored) {}
@@ -84,8 +116,10 @@ public class SirenService extends Service {
                     "Alerta médico",
                     NotificationManager.IMPORTANCE_HIGH
             );
-            channel.setDescription("Mantém a sirene do alerta médico ativa.");
+            channel.setDescription("Mantém a sirene do alerta médico ativa e abre a tela de resposta.");
             channel.setSound(null, null);
+            channel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+            channel.setBypassDnd(true);
             NotificationManager manager = getSystemService(NotificationManager.class);
             if (manager != null) {
                 manager.createNotificationChannel(channel);
@@ -143,7 +177,6 @@ public class SirenService extends Service {
 
                     double step = 2.0 * Math.PI * frequency / SAMPLE_RATE;
                     for (int i = 0; i < chunk; i++) {
-                        // Duas componentes para um timbre mais próximo de sirene.
                         double v = Math.sin(phase) * 0.78 + Math.sin(phase * 0.5) * 0.22;
                         pcm[i] = (short) (v * Short.MAX_VALUE * 0.78);
                         phase += step;
